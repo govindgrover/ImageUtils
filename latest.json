@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.2.0",
   "url": "https://github.com/govindgrover/ImageUtils/releases",
-  "notes": "initial release"
+  "notes": "Added more cropping options and improved interaction with the UI."
 }

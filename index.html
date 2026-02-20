@@ -110,6 +110,12 @@
 			transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 		}
 
+		.card p {
+			font-size: 14px;
+			margin: 0;
+			max-width: none;
+		}
+
 		.card:hover {
 			transform: translateY(-2px);
 			box-shadow: 0 4px 16px rgba(107, 79, 29, 0.1);
@@ -166,23 +172,15 @@
 				<div class="hero-text">
 					<h1>Crop images with pixel-perfect precision.</h1>
 					<p>ImageCrop is a simple desktop tool for creators, teams, and anyone who needs precise, consistent
-						image cropping. Crop once, save presets*, and batch-process hundreds of images with
+						image cropping. Crop from center or set custom margins, then batch-process hundreds of images with
 						confidence. Part of the <strong>ImageUtils</strong> toolkit.</p>
 				</div>
 				<img class="hero-logo" src="ImageUtils-logo.png" alt="ImageCrop logo">
 			</div>
-			<div>
-				<p><i>*Presets coming soon!</i></p>
-			</div>
 			<div class="grid">
-				<div class="card"><strong>Designers & creators</strong><br>Crop product photos, social media assets, and
-					thumbnails to exact dimensions without guesswork.</div>
-				<div class="card"><strong>E-commerce & content teams</strong><br>Batch-crop hundreds of images to
-					consistent
-					aspect ratios for catalogs and galleries.</div>
-				<div class="card"><strong>Photographers & agencies</strong><br>Save crop presets for different platforms
-					and
-					apply them instantly across projects.</div>
+				<div class="card"><strong>Two crop modes</strong><br><p><strong>Center crop:</strong> Keep the center of your image and discard edges evenly. <strong>Margin crop:</strong> Remove specific pixels from each side (top, right, bottom, left).</p></div>
+				<div class="card"><strong>Batch processing</strong><br><p>Process hundreds of images at once with the same crop settings. Preserves folder structure and image quality.</p></div>
+				<div class="card"><strong>For everyone</strong><br><p>Designers, e-commerce teams, photographers, and content creators can crop product photos, social media assets, and thumbnails to exact dimensions.</p></div>
 			</div>
 			<p>Open-source MIT licensed, privacy-friendly, and built for speed by <a
 					href="https://govindgrover.com">Govind Grover</a> | <a href="https://github.com/govindgrover"
