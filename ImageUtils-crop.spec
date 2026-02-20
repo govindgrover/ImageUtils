@@ -1,9 +1,23 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.building.build_main import Analysis, EXE, PYZ  # type: ignore
 
-datas = []
+# Data files to include in the build
+datas = [
+    ('config.json', '.'),
+    ('app_config.py', '.'),
+    ('functions.py', '.'),
+    ('ImageUtils-logo.ico', '.'),
+]
+
 binaries = []
-hiddenimports = ['PIL', 'PIL._tkinter_finder']
+
+# Hidden imports that PyInstaller might miss
+hiddenimports = [
+    'PIL',
+    'PIL._tkinter_finder',
+    'PIL.Image',
+    'PIL.ImageTk',
+]
 
 
 a = Analysis(
@@ -40,4 +54,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='ImageUtils-logo.ico'
 )
