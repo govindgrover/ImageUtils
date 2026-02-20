@@ -18,7 +18,7 @@ from functions import _is_newer_version
 IMAGE_EXTENSIONS = ("*.jpg", "*.jpeg", "*.png")
 DEFAULT_CONFIG = {
     "app_name": "Image Crop Tool",
-    "app_version": "1.0.1",
+    "app_version": "1.2.0",
     "update_url": "",
 }
 UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
@@ -45,8 +45,8 @@ class CropApp(tk.Tk):
 
         self.input_dir = tk.StringVar()
         self.output_dir = tk.StringVar()
-        self.crop_pixels = tk.StringVar(value="175")
-        self.crop_mode = tk.StringVar(value="bottom")
+        self.crop_pixels = tk.StringVar(value="150")
+        self.crop_mode = tk.StringVar(value="center")
         self.margin_top = tk.StringVar(value="0")
         self.margin_right = tk.StringVar(value="0")
         self.margin_bottom = tk.StringVar(value="175")
@@ -77,30 +77,33 @@ class CropApp(tk.Tk):
 
         ttk.Radiobutton(
             mode_frame,
-            text="Crop from bottom",
-            value="bottom",
-            variable=self.crop_mode,
-        ).grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(
-            mode_frame,
-            text="Crop from center (distance in all 4 directions)",
+            text="Crop from center (keep center content)",
             value="center",
             variable=self.crop_mode,
-        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=0, column=0, sticky="w")
+        
+        # Thin separator line
+        separator = ttk.Separator(mode_frame, orient="horizontal")
+        separator.grid(row=1, column=0, sticky="w", pady=(8, 8), padx=(0, 0))
+        # Set width to match text width approximately
+        separator.configure(style="Thin.TSeparator")
+        
         ttk.Radiobutton(
             mode_frame,
             text="Crop by margins (top/right/bottom/left)",
             value="margins",
             variable=self.crop_mode,
-        ).grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=2, column=0, sticky="w")
 
         pixel_frame = ttk.Frame(mode_frame)
-        pixel_frame.grid(row=0, column=1, rowspan=2, padx=(22, 0), sticky="nw")
-        ttk.Label(pixel_frame, text="Pixels:").grid(row=0, column=0, sticky="w")
+        pixel_frame.grid(row=0, column=1, padx=(22, 0), sticky="nw")
+        ttk.Label(pixel_frame, text="Pixels from center:").grid(row=0, column=0, sticky="w")
         ttk.Entry(pixel_frame, textvariable=self.crop_pixels, width=8).grid(row=0, column=1, padx=(8, 0))
         ttk.Label(
             pixel_frame,
-            text="Used for: bottom crop, or center distance",
+            text="Distance from center in all 4 directions",
+            foreground="#666666",
+            font=("Segoe UI", 8)
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         margin_frame = ttk.Frame(mode_frame)
@@ -158,7 +161,7 @@ class CropApp(tk.Tk):
         crop_pixels = 0
         margins = (0, 0, 0, 0)
 
-        if crop_mode in {"bottom", "center"}:
+        if crop_mode == "center":
             try:
                 crop_pixels = int(self.crop_pixels.get().strip())
             except ValueError:
@@ -196,7 +199,7 @@ class CropApp(tk.Tk):
             messagebox.showerror("Invalid folder", "Please choose an output folder.")
             return
 
-        self.status.set("Scanning files...")
+        self.status.set("Cropping files...")
         worker = threading.Thread(
             target=self._crop_images,
             args=(input_folder, output_folder, crop_mode, crop_pixels, margins),
@@ -216,6 +219,9 @@ class CropApp(tk.Tk):
         for ext in IMAGE_EXTENSIONS:
             image_paths.extend(input_folder.rglob(ext))
             image_paths.extend(input_folder.rglob(ext.upper()))
+        
+        # Remove duplicates (Windows is case-insensitive, so *.jpg and *.JPG match the same files)
+        image_paths = list(dict.fromkeys(image_paths))
 
         total = len(image_paths)
         self.after(0, lambda: self._set_progress(0, total))
@@ -226,6 +232,8 @@ class CropApp(tk.Tk):
 
         processed = 0
         skipped = 0
+        errors: list[tuple[str, str]] = []  # (filename, error_message)
+        max_errors_to_track = 10
 
         for img_path in image_paths:
             relative_path = img_path.relative_to(input_folder)
@@ -238,6 +246,8 @@ class CropApp(tk.Tk):
                     crop_box = self._build_crop_box(width, height, crop_mode, crop_pixels, margins)
                     if crop_box is None:
                         skipped += 1
+                        if len(errors) < max_errors_to_track:
+                            errors.append((img_path.name, "Image too small for crop settings"))
                         continue
 
                     cropped = img.crop(crop_box)
@@ -249,17 +259,19 @@ class CropApp(tk.Tk):
                     # diff = ImageChops.difference(original_crop_part, cropped)
                     # print(diff.getbbox())
                 processed += 1
-            except Exception:
+            except Exception as e:
                 skipped += 1
+                if len(errors) < max_errors_to_track:
+                    error_msg = f"{type(e).__name__}: {str(e)}" if str(e) else type(e).__name__
+                    errors.append((img_path.name, error_msg))
 
             self.after(0, lambda p=processed + skipped, t=total: self._set_progress(p, t))
 
-        self.after(
-            0,
-            lambda: self.status.set(
-                f"Done. Cropped: {processed}, Skipped/failed: {skipped}, Output: {output_folder}"
-            ),
-        )
+        status_msg = f"Done. Cropped: {processed}, Skipped/failed: {skipped}, Output: {output_folder}"
+        self.after(0, lambda: self.status.set(status_msg))
+        
+        if errors:
+            self.after(0, lambda: self._show_error_report(errors, skipped))
 
     def _build_crop_box(
         self,
@@ -269,11 +281,6 @@ class CropApp(tk.Tk):
         crop_pixels: int,
         margins: tuple[int, int, int, int],
     ) -> tuple[int, int, int, int] | None:
-        if crop_mode == "bottom":
-            if crop_pixels >= height:
-                return None
-            return (0, 0, width, height - crop_pixels)
-
         if crop_mode == "center":
             center_x = width // 2
             center_y = height // 2
@@ -298,6 +305,23 @@ class CropApp(tk.Tk):
 
         return None
 
+    def _show_error_report(self, errors: list[tuple[str, str]], total_failed: int) -> None:
+        """Display a dialog showing error details for failed images."""
+        error_lines = []
+        for filename, error_msg in errors:
+            error_lines.append(f"• {filename}\n  {error_msg}")
+        
+        error_text = "\n\n".join(error_lines)
+        
+        if total_failed > len(errors):
+            remaining = total_failed - len(errors)
+            error_text += f"\n\n... and {remaining} more error(s)"
+        
+        messagebox.showwarning(
+            "Processing Errors",
+            f"{total_failed} image(s) failed to process:\n\n{error_text}",
+        )
+
     def _save_cropped_image(self, cropped: Image.Image, original: Image.Image, output_path: Path) -> None:
         image_format = (original.format or "").upper()
         save_kwargs: dict[str, str] = {}
@@ -309,12 +333,13 @@ class CropApp(tk.Tk):
 
         try:
             cropped.save(output_path, **save_kwargs)
-        except OSError:
+        except (OSError, ValueError):
+            # Fallback if 'keep' is not supported or other save errors occur
             if image_format in {"JPEG", "JPG"}:
-                fallback_kwargs: dict[str, str | int] = {"quality": 95, "subsampling": 0, "optimize": True}
+                fallback_kwargs = {"quality": 95, "subsampling": 0, "optimize": True}
                 if image_format:
                     fallback_kwargs["format"] = image_format
-                cropped.save(output_path, **fallback_kwargs)
+                cropped.save(output_path, **fallback_kwargs)  # type: ignore[arg-type]
                 return
             raise
 
