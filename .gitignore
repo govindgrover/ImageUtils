@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.spec.bak
+
+# PyInstaller
+*.manifest
+*.spec~
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Project specific
+*.log
+test_output/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Distribution / Release
+*.exe
+*.zip
+*.tar.gz
+releases/
+
+/scripts
