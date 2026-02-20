@@ -13,11 +13,12 @@ from urllib.request import urlopen
 from PIL import Image
 
 from app_config import load_app_config
+from functions import _is_newer_version
 
 IMAGE_EXTENSIONS = ("*.jpg", "*.jpeg", "*.png")
 DEFAULT_CONFIG = {
     "app_name": "Image Crop Tool",
-    "app_version": "1.0.0",
+    "app_version": "1.0.1",
     "update_url": "",
 }
 UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
@@ -36,6 +37,11 @@ class CropApp(tk.Tk):
         self.title(f"{APP_NAME} v{APP_VERSION}")
         self.geometry("680x420")
         self.resizable(False, False)
+        
+        # Set window icon
+        icon_path = Path(__file__).with_name("ImageUtils-logo.ico")
+        if icon_path.exists():
+            self.iconbitmap(icon_path)
 
         self.input_dir = tk.StringVar()
         self.output_dir = tk.StringVar()
@@ -79,6 +85,17 @@ class CropApp(tk.Tk):
         )
 
         frame.columnconfigure(0, weight=1)
+        
+        # Footer with version information
+        footer = ttk.Frame(self)
+        footer.pack(side="bottom", fill="x")
+        footer_label = ttk.Label(
+            footer, 
+            text=f"v{APP_VERSION}", 
+            foreground="#888888",
+            font=("Segoe UI", 8)
+        )
+        footer_label.pack(side="right", padx=8, pady=4)
 
     def _pick_input(self) -> None:
         folder = filedialog.askdirectory(title="Select input folder")
