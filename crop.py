@@ -1,19 +1,39 @@
 from __future__ import annotations
 
+import json
+import re
 import threading
-from pathlib import Path
 import tkinter as tk
+import webbrowser
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from urllib.error import URLError
+from urllib.request import urlopen
 
 from PIL import Image
 
+from app_config import load_app_config
+
 IMAGE_EXTENSIONS = ("*.jpg", "*.jpeg", "*.png")
+DEFAULT_CONFIG = {
+    "app_name": "Image Crop Tool",
+    "app_version": "1.0.0",
+    "update_url": "",
+}
+UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+INITIAL_UPDATE_CHECK_DELAY_MS = 30_000
+
+
+CONFIG = load_app_config("crop", DEFAULT_CONFIG)
+APP_NAME = CONFIG["app_name"]
+APP_VERSION = CONFIG["app_version"]
+UPDATE_URL = CONFIG["update_url"]
 
 
 class CropApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("Image Crop Tool")
+        self.title(f"{APP_NAME} v{APP_VERSION}")
         self.geometry("680x420")
         self.resizable(False, False)
 
@@ -23,7 +43,11 @@ class CropApp(tk.Tk):
         self.status = tk.StringVar(value="Select folders and click Start.")
         self.progress_text = tk.StringVar(value="0 / 0")
 
+        self.update_banner: ttk.Frame | None = None
+        self.update_download_url = ""
+
         self._build_ui()
+        self._schedule_update_checks()
 
     def _build_ui(self) -> None:
         frame = ttk.Frame(self, padding=16)
@@ -147,6 +171,71 @@ class CropApp(tk.Tk):
         self.progress["maximum"] = max(total, 1)
         self.progress["value"] = current
         self.progress_text.set(f"{current} / {total}")
+
+    def _schedule_update_checks(self) -> None:
+        self.after(INITIAL_UPDATE_CHECK_DELAY_MS, self._start_update_check)
+
+    def _start_update_check(self) -> None:
+        worker = threading.Thread(target=self._check_for_updates, daemon=True)
+        worker.start()
+
+    def _check_for_updates(self) -> None:
+        try:
+            if not UPDATE_URL:
+                return
+
+            with urlopen(UPDATE_URL, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+
+            remote_version = str(payload.get("version", "")).strip()
+            download_url = str(payload.get("url") or payload.get("html_url") or "").strip()
+            notes = str(payload.get("notes", "")).strip()
+
+            if remote_version and download_url and _is_newer_version(remote_version, APP_VERSION):
+                self.after(
+                    0,
+                    lambda: self._show_update_banner(
+                        remote_version=remote_version,
+                        download_url=download_url,
+                        notes=notes,
+                    ),
+                )
+        except (URLError, TimeoutError, ValueError, OSError, json.JSONDecodeError):
+            pass
+        finally:
+            self.after(UPDATE_CHECK_INTERVAL_MS, self._start_update_check)
+
+    def _show_update_banner(self, remote_version: str, download_url: str, notes: str) -> None:
+        if self.update_banner is not None:
+            return
+
+        self.update_download_url = download_url
+        notes_preview = notes[:80] + ("..." if len(notes) > 80 else "")
+        banner_text = f"Update available: v{remote_version}"
+        if notes_preview:
+            banner_text += f" • {notes_preview}"
+
+        self.update_banner = ttk.Frame(self, padding=(10, 8))
+        self.update_banner.place(relx=1.0, x=-12, y=12, anchor="ne")
+
+        ttk.Label(self.update_banner, text=banner_text, wraplength=300).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 8)
+        )
+        ttk.Button(self.update_banner, text="Download", command=self._open_download_url).grid(
+            row=1, column=0, sticky="w"
+        )
+        ttk.Button(self.update_banner, text="Dismiss", command=self._dismiss_update_banner).grid(
+            row=1, column=1, padx=(8, 0), sticky="e"
+        )
+
+    def _dismiss_update_banner(self) -> None:
+        if self.update_banner is not None:
+            self.update_banner.destroy()
+            self.update_banner = None
+
+    def _open_download_url(self) -> None:
+        if self.update_download_url:
+            webbrowser.open(self.update_download_url)
 
 
 def main() -> None:

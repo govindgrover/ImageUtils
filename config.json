@@ -1,0 +1,12 @@
+{
+  "app_name": "ImageUtils",
+  "app_version": "1.0.0",
+  "update_url": "",
+  "apps": {
+    "crop": {
+      "app_name": "Image Crop Tool",
+      "app_version": "1.0.0",
+      "update_url": "https://govindgrover.github.io/ImageUtils/latest.json"
+    }
+  }
+}
