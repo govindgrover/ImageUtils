@@ -35,7 +35,7 @@ class CropApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title(f"{APP_NAME} v{APP_VERSION}")
-        self.geometry("680x420")
+        self.geometry("760x520")
         self.resizable(False, False)
         
         # Set window icon
@@ -46,6 +46,11 @@ class CropApp(tk.Tk):
         self.input_dir = tk.StringVar()
         self.output_dir = tk.StringVar()
         self.crop_pixels = tk.StringVar(value="175")
+        self.crop_mode = tk.StringVar(value="bottom")
+        self.margin_top = tk.StringVar(value="0")
+        self.margin_right = tk.StringVar(value="0")
+        self.margin_bottom = tk.StringVar(value="175")
+        self.margin_left = tk.StringVar(value="0")
         self.status = tk.StringVar(value="Select folders and click Start.")
         self.progress_text = tk.StringVar(value="0 / 0")
 
@@ -67,10 +72,47 @@ class CropApp(tk.Tk):
         ttk.Entry(frame, textvariable=self.output_dir, width=62).grid(row=3, column=0, sticky="ew")
         ttk.Button(frame, text="Browse", command=self._pick_output).grid(row=3, column=1, padx=(8, 0))
 
-        options = ttk.Frame(frame)
-        options.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(14, 0))
-        ttk.Label(options, text="Pixels to crop from bottom:").pack(side="left")
-        ttk.Entry(options, textvariable=self.crop_pixels, width=8).pack(side="left", padx=(8, 0))
+        mode_frame = ttk.LabelFrame(frame, text="Crop mode", padding=10)
+        mode_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(14, 0))
+
+        ttk.Radiobutton(
+            mode_frame,
+            text="Crop from bottom",
+            value="bottom",
+            variable=self.crop_mode,
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Radiobutton(
+            mode_frame,
+            text="Crop from center (distance in all 4 directions)",
+            value="center",
+            variable=self.crop_mode,
+        ).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Radiobutton(
+            mode_frame,
+            text="Crop by margins (top/right/bottom/left)",
+            value="margins",
+            variable=self.crop_mode,
+        ).grid(row=2, column=0, sticky="w", pady=(6, 0))
+
+        pixel_frame = ttk.Frame(mode_frame)
+        pixel_frame.grid(row=0, column=1, rowspan=2, padx=(22, 0), sticky="nw")
+        ttk.Label(pixel_frame, text="Pixels:").grid(row=0, column=0, sticky="w")
+        ttk.Entry(pixel_frame, textvariable=self.crop_pixels, width=8).grid(row=0, column=1, padx=(8, 0))
+        ttk.Label(
+            pixel_frame,
+            text="Used for: bottom crop, or center distance",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
+        margin_frame = ttk.Frame(mode_frame)
+        margin_frame.grid(row=2, column=1, padx=(22, 0), sticky="nw")
+        ttk.Label(margin_frame, text="Top").grid(row=0, column=0)
+        ttk.Entry(margin_frame, textvariable=self.margin_top, width=6).grid(row=1, column=0, padx=(0, 4))
+        ttk.Label(margin_frame, text="Right").grid(row=0, column=1)
+        ttk.Entry(margin_frame, textvariable=self.margin_right, width=6).grid(row=1, column=1, padx=4)
+        ttk.Label(margin_frame, text="Bottom").grid(row=0, column=2)
+        ttk.Entry(margin_frame, textvariable=self.margin_bottom, width=6).grid(row=1, column=2, padx=4)
+        ttk.Label(margin_frame, text="Left").grid(row=0, column=3)
+        ttk.Entry(margin_frame, textvariable=self.margin_left, width=6).grid(row=1, column=3, padx=(4, 0))
 
         ttk.Button(frame, text="Start Cropping", command=self._start_crop).grid(
             row=5, column=0, columnspan=2, sticky="ew", pady=(18, 10)
@@ -112,15 +154,36 @@ class CropApp(tk.Tk):
             self.output_dir.set(folder)
 
     def _start_crop(self) -> None:
-        try:
-            crop_pixels = int(self.crop_pixels.get().strip())
-        except ValueError:
-            messagebox.showerror("Invalid input", "Crop pixels must be a whole number.")
-            return
+        crop_mode = self.crop_mode.get()
+        crop_pixels = 0
+        margins = (0, 0, 0, 0)
 
-        if crop_pixels < 1:
-            messagebox.showerror("Invalid input", "Crop pixels must be greater than 0.")
-            return
+        if crop_mode in {"bottom", "center"}:
+            try:
+                crop_pixels = int(self.crop_pixels.get().strip())
+            except ValueError:
+                messagebox.showerror("Invalid input", "Pixels must be a whole number.")
+                return
+
+            if crop_pixels < 1:
+                messagebox.showerror("Invalid input", "Pixels must be greater than 0.")
+                return
+
+        if crop_mode == "margins":
+            try:
+                margins = (
+                    int(self.margin_top.get().strip()),
+                    int(self.margin_right.get().strip()),
+                    int(self.margin_bottom.get().strip()),
+                    int(self.margin_left.get().strip()),
+                )
+            except ValueError:
+                messagebox.showerror("Invalid input", "All margin values must be whole numbers.")
+                return
+
+            if any(value < 0 for value in margins):
+                messagebox.showerror("Invalid input", "Margin values must be 0 or greater.")
+                return
 
         input_folder = Path(self.input_dir.get().strip())
         output_folder = Path(self.output_dir.get().strip())
@@ -136,12 +199,19 @@ class CropApp(tk.Tk):
         self.status.set("Scanning files...")
         worker = threading.Thread(
             target=self._crop_images,
-            args=(input_folder, output_folder, crop_pixels),
+            args=(input_folder, output_folder, crop_mode, crop_pixels, margins),
             daemon=True,
         )
         worker.start()
 
-    def _crop_images(self, input_folder: Path, output_folder: Path, crop_pixels: int) -> None:
+    def _crop_images(
+        self,
+        input_folder: Path,
+        output_folder: Path,
+        crop_mode: str,
+        crop_pixels: int,
+        margins: tuple[int, int, int, int],
+    ) -> None:
         image_paths: list[Path] = []
         for ext in IMAGE_EXTENSIONS:
             image_paths.extend(input_folder.rglob(ext))
@@ -165,12 +235,19 @@ class CropApp(tk.Tk):
             try:
                 with Image.open(img_path) as img:
                     width, height = img.size
-                    if crop_pixels >= height:
+                    crop_box = self._build_crop_box(width, height, crop_mode, crop_pixels, margins)
+                    if crop_box is None:
                         skipped += 1
                         continue
 
-                    cropped = img.crop((0, 0, width, height - crop_pixels))
-                    cropped.save(output_path, quality=95, subsampling=0, optimize=True)
+                    cropped = img.crop(crop_box)
+                    self._save_cropped_image(cropped, img, output_path)
+
+                    # Debug option (keep commented unless needed):
+                    # from PIL import ImageChops
+                    # original_crop_part = img.crop(crop_box)
+                    # diff = ImageChops.difference(original_crop_part, cropped)
+                    # print(diff.getbbox())
                 processed += 1
             except Exception:
                 skipped += 1
@@ -183,6 +260,63 @@ class CropApp(tk.Tk):
                 f"Done. Cropped: {processed}, Skipped/failed: {skipped}, Output: {output_folder}"
             ),
         )
+
+    def _build_crop_box(
+        self,
+        width: int,
+        height: int,
+        crop_mode: str,
+        crop_pixels: int,
+        margins: tuple[int, int, int, int],
+    ) -> tuple[int, int, int, int] | None:
+        if crop_mode == "bottom":
+            if crop_pixels >= height:
+                return None
+            return (0, 0, width, height - crop_pixels)
+
+        if crop_mode == "center":
+            center_x = width // 2
+            center_y = height // 2
+            left = center_x - crop_pixels
+            top = center_y - crop_pixels
+            right = center_x + crop_pixels
+            bottom = center_y + crop_pixels
+
+            if left < 0 or top < 0 or right > width or bottom > height:
+                return None
+            return (left, top, right, bottom)
+
+        if crop_mode == "margins":
+            top_margin, right_margin, bottom_margin, left_margin = margins
+            left = left_margin
+            top = top_margin
+            right = width - right_margin
+            bottom = height - bottom_margin
+            if left >= right or top >= bottom:
+                return None
+            return (left, top, right, bottom)
+
+        return None
+
+    def _save_cropped_image(self, cropped: Image.Image, original: Image.Image, output_path: Path) -> None:
+        image_format = (original.format or "").upper()
+        save_kwargs: dict[str, str] = {}
+        if image_format:
+            save_kwargs["format"] = image_format
+
+        if image_format in {"JPEG", "JPG"}:
+            save_kwargs.update({"quality": "keep", "subsampling": "keep"})
+
+        try:
+            cropped.save(output_path, **save_kwargs)
+        except OSError:
+            if image_format in {"JPEG", "JPG"}:
+                fallback_kwargs: dict[str, str | int] = {"quality": 95, "subsampling": 0, "optimize": True}
+                if image_format:
+                    fallback_kwargs["format"] = image_format
+                cropped.save(output_path, **fallback_kwargs)
+                return
+            raise
 
     def _set_progress(self, current: int, total: int) -> None:
         self.progress["maximum"] = max(total, 1)
